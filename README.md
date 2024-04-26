@@ -7,7 +7,7 @@ An incomplete library for interoperation with C++ libraries using `virtual` and 
 `./example_interface.h`
 ```c++
 struct ExampleInterface {
-  virtual int foo(const char* param1, int param2) = 0;
+  virtual int foo(int param1) = 0;
   virtual void bar_custom_name(int param1) = 0;
 };
 ```
@@ -16,10 +16,10 @@ struct ExampleInterface {
 ```nim
 import CppClassInterop
 
-from std/os import splitPath, joinPath
+from std/os import splitPath
 
 {.
-  passC: "-I" & joinPath(currentSourcePath().splitPath().head, "headers")
+  passC: "-I" & currentSourcePath().splitPath().head
 }
 
 cppClass Foo {.header: "example_interface.h", importcpp: "ExampleInterface".}:
