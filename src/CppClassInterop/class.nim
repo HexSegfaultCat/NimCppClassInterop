@@ -50,23 +50,23 @@ proc processMethodNode(classType: ref ClassType, node: NimNode) {.compileTime.} 
       else: error fmt"Unknown pragma type"
   )
 
-  let header = methodType.ast.pragmas.getPragma(genAst header)
   let foreignName = methodType.ast.pragmas.getPragma(genAst cppName)
 
   let hasAbstract = isSome methodType.ast.pragmas.getPragma(genAst cppAbstract)
   let hasVirtual = isSome methodType.ast.pragmas.getPragma(genAst cppVirtual)
   let hasOverride = isSome methodType.ast.pragmas.getPragma(genAst cppOverride)
 
-  methodType.isImported = isSome header
   methodType.cppName = (
-    if foreignName.isSome and not hasOverride: foreignName.get.value.get.strVal
-    else: node.name.strVal
+    if foreignName.isSome and not hasOverride:
+      foreignName.get.value.get.strVal
+    else:
+      node.name.strVal
   )
 
-  if header.isSome:
+  if classType.isImported:
     if hasOverride:
       error(
-        fmt"Method {methodType.name} is loaded from header and cannot have override pragma",
+        fmt"Method {methodType.name} is imported from C++ code and cannot have override pragma",
         node
       )
   else:
@@ -172,11 +172,13 @@ macro cppClass*(header: untyped, body: untyped): untyped =
   ):
     classType.ast.pragmas.add(pragma)
 
-  if not classType.ast.pragmas.getPragma(genAst importcpp).isSome:
+  if classType.ast.pragmas.getPragma(genAst importcpp).isNone:
     let classForeignName = classType.ast.pragmas.getPragma(genAst cppName)
     classType.cppName = (
-      if classForeignName.isSome: classForeignName.get.value.get.strVal
-      else: classType.name.strVal
+      if classForeignName.isSome:
+        classForeignName.get.value.get.strVal
+      else:
+        classType.name.strVal
     )
 
     let exportPragma = CppPragma(
@@ -184,6 +186,9 @@ macro cppClass*(header: untyped, body: untyped): untyped =
       value: some newStrLitNode(classType.cppName)
     )
     classType.ast.pragmas.add(exportPragma)
+    classType.isImported = false
+  else:
+    classType.isImported = true
 
   if not classType.ast.pragmas.getPragma(genAst used).isSome:
     classType.ast.pragmas.add(CppPragma(name: genAst(used), value: none NimNode))
@@ -218,14 +223,14 @@ macro cppClass*(header: untyped, body: untyped): untyped =
   # Parse and translate pragmas
   for classMethod in classType.methods:
     classMethod.ast.node.pragma.add(genAst used)
-    if classMethod.isImported:
+    if classType.isImported:
       let foreignPragma = newColonExpr(
         ident"importcpp",
         newStrLitNode fmt"#.{classMethod.cppName}(@)"
       )
       classMethod.ast.node.pragma.add(foreignPragma)
 
-    if classMethod.isImported:
+    if classType.isImported:
       continue
 
     let templateArgs =
@@ -245,7 +250,7 @@ macro cppClass*(header: untyped, body: untyped): untyped =
       .join(", ")
 
     let suffix = case classMethod.kind:
-      of Abstract: " = 0" # WARN: Not working (Nim 2.1.1)
+      of Abstract: " = 0"
       else:
         if classMethod.isOverriding: " override"
         else: ""
@@ -267,8 +272,6 @@ macro cppClass*(header: untyped, body: untyped): untyped =
     if classMethod.kind == Abstract:
       classMethod.ast.node[6] = newStmtList(quote do: discard)
 
-  # TODO: Uncomment when the compiler bug gets fixed
-  # Applied local fix
   for classMethod in classType.methods:
     let forwardDeclaration = newProc(
       classMethod.ast.node[0].copy(),
@@ -280,5 +283,6 @@ macro cppClass*(header: untyped, body: untyped): untyped =
     result.add(forwardDeclaration)
 
   for classMethod in classType.methods:
-    result.add(classMethod.ast.node)
+    if classType.isImported == false:
+      result.add(classMethod.ast.node)
 

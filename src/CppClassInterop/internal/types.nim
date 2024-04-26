@@ -27,7 +27,6 @@ type MethodType* {.byRef.} = object
   name*: NimNode
   kind*: MethodKind
   cppName*: string
-  isImported*: bool
   isOverriding*: bool
   returnType*: CppParameter
   parameters*: seq[CppParameter] = @[]
@@ -38,6 +37,7 @@ type ClassType* {.byRef.} = object
   baseClass*: ref ClassType = nil
   methods*: seq[ref MethodType] = @[]
   cppName*: string
+  isImported*: bool
 
 var cppTypes* {.compileTime.}: seq[ref ClassType] = @[]
 

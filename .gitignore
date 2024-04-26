@@ -1,0 +1,7 @@
+testresults/
+nimcache/
+
+# Ignore built test binaries (files without extension)
+tests/**/*
+!tests/**/*.*
+!tests/**/

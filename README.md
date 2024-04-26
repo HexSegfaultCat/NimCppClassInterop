@@ -2,119 +2,43 @@
 
 An incomplete library for interoperation with C++ libraries using `virtual` and `member` pragmas. I'm writing this library to learn Nim and to make it easier to wrap C++ libraries. It probably needs complete rewrite, but I'm still experimenting with Nim.
 
-Example with implementation of interface declared in `.h` file (part of my OpenVR driver implementation, which I use to test if the library works):
-```nim
-from os import splitPath
+## Example (implementing a C++ interface from header file)
 
+`./example_interface.h`
+```c++
+struct ExampleInterface {
+  virtual int foo(const char* param1, int param2) = 0;
+  virtual void bar_custom_name(int param1) = 0;
+};
+```
+
+`./file.nim`
+```nim
 import CppClassInterop
-# ...
+
+from std/os import splitPath, joinPath
 
 {.
-  passC: "-I" & currentSourcePath().splitPath().head
+  passC: "-I" & joinPath(currentSourcePath().splitPath().head, "headers")
 }
 
-cppClass IServerTrackedDeviceProvider {.
-  header: "openvr_driver.h",
-  importcpp: "vr::IServerTrackedDeviceProvider",
-.}:
-  proc init*(driverContext: ptr IVRDriverContext): EVRInitError {.
-    header: "openvr_driver.h",
-    cppName: "Init",
+cppClass Foo {.header: "example_interface.h", importcpp: "ExampleInterface".}:
+  proc foo*(param1: cint): cint {.
     cppAbstract,
   .}
-  proc cleanup*() {.
-    header: "openvr_driver.h",
-    cppName: "Cleanup",
+  proc bar*(param1: cint): void {.
     cppAbstract,
+    cppName: "bar_custom_name",
   .}
-  proc getInterfaceVersions*(): ConstCharPointerConstPointer {.
-    header: "openvr_driver.h",
-    cppName: "GetInterfaceVersions",
-    cppAbstract,
-  .}
-  proc runFrame*() {.
-    header: "openvr_driver.h",
-    cppName: "RunFrame",
-    cppAbstract,
-  .}
-  proc shouldBlockStandbyMode*(): bool {.
-    header: "openvr_driver.h",
-    cppName: "ShouldBlockStandbyMode",
-    cppAbstract,
-  .}
-  proc enterStandby*() {.
-    header: "openvr_driver.h",
-    cppName: "EnterStandby",
-    cppAbstract,
-  .}
-  proc leaveStandby*() {.
-    header: "openvr_driver.h",
-    cppName: "LeaveStandby",
-    cppAbstract,
-  .}
-```
-```nim
-import CppClassInterop
-# ...
 
-cppClass DeviceProvider of IServerTrackedDeviceProvider:
-  var exampleController*: ControllerDevice
-  var exampleHmd*: HmdControllerDevice
+cppClass Bar of Foo:
+  proc foo*(param1: cint): cint {.cppOverride.} =
+    echo param1
 
-  proc init*(driverContext: ptr IVRDriverContext): EVRInitError {.
-    cppOverride,
-  .} =
-    this.exampleController.addr.deviceId = TrackedDeviceIndexInvalid
-    echo "[Nim] Got init"
+  proc bar*(param1: cint): void {.cppOverride.} =
+    echo "bar"
 
-    var errorCode = initServerDriverContext(driverContext)
-    if errorCode != VRInitErrorNone:
-      echo "[Nim] Error in init, stopping initialization"
-      return errorCode
-
-    var controllerStatus = vrServerDriverHost().trackedDeviceAdded(
-      "ExampleController",
-      TrackedDeviceClass_Controller,
-      addr this.exampleController
-    )
-    echo "[Nim] Controller initialization status: " & $controllerStatus
-
-    var hmdStatus = vrServerDriverHost().trackedDeviceAdded(
-      "ExampleHmd",
-      TrackedDeviceClass_HMD,
-      addr this.exampleHmd
-    )
-    echo "[Nim] HMD initialization status: " & $hmdStatus
-
-    return VRInitErrorNone
-
-  proc cleanup*() {.cppOverride.} =
-    echo "[Nim] Cleanup"
-    cleanupDriverContext()
-
-  proc getInterfaceVersions*(): ConstCharPointerConstPointer {.cppOverride.} =
-    echo "[Nim] GetInterfaceVersions"
-    return InterfaceVersions
-
-  proc runFrame*() {.cppOverride.} =
-    var vrEvent: VREvent
-    while vrServerDriverHost().pollNextEvent(
-      addr vrEvent,
-      sizeof(vrEvent).uint32
-    ):
-      this.exampleController.addr.handleEvent(vrEvent)
-      echo "[Nim] Handling event " & repr vrEvent
-
-    this.exampleController.addr.runFrame()
-    this.exampleHmd.addr.poseUpdateBackground()
-
-  proc shouldBlockStandbyMode*(): bool {.cppOverride.} =
-    echo "[Nim] ShouldBlockStandbyMode"
-    return false
-
-  proc enterStandby*() {.cppOverride.} =
-    echo "[Nim] EnterStandby"
-
-  proc leaveStandby*() {.cppOverride.} =
-    echo "[Nim] LeaveStandby"
+var b = Bar()
+discard b.foo(1)
+b.bar(2)
 ```
